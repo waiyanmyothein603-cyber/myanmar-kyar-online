@@ -1,0 +1,10 @@
+{
+  "appId": "com.futurecode.myanmarkyar",
+  "appName": "Myanmar Kyar Online",
+  "webDir": "www",
+  "server": {
+    "url": "https://myanmar-kyar-online.vercel.app",
+    "cleartext": false,
+    "androidScheme": "https"
+  }
+}
