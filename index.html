@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="my">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no" />
+<meta name="theme-color" content="#120904" />
+<title>မြန်မာကျား Online</title>
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<div class="app">
+<header><div class="logo">🐅 မြန်မာကျားကွက်</div><div class="sub">မြန်မာကျားကစားနည်းကို online က နေ အလွယ်တကူ ချိတ်ဆက်ကစားလိုက်ပါ</div></header>
+<section id="home" class="screen active">
+  <div class="card">
+    <div class="title">👤 Online Player</div>
+    <div id="authState" class="notice"><span class="spinner"></span>Online account ချိတ်ဆက်နေပါတယ်...</div>
+    <div class="profile-head"><img id="homeAvatar" class="avatar big" alt="avatar"><div class="grow"><b id="homeName" style="font-size:18px">Player</b><div class="small">ကိုယ့်ပုံ၊ နာမည်၊ မိတ်ဆက်စာကို Profile ထဲမှာ ပြင်နိုင်ပါတယ်</div></div></div>
+    <div id="profileStats" class="profile-stats"><div class="profile-stat">RATING<b id="profileRating">—</b></div><div class="profile-stat">POINTS<b id="profilePoints">—</b></div><div class="profile-stat">W / D / L<b id="profileWDL">—</b></div><div class="profile-stat">ONLINE<b id="onlineCount">—</b></div></div>
+    <div class="row"><button class="btn secondary" onclick="openMyProfile()">✏️ Profile ပြင်မယ်</button><button class="btn secondary" onclick="openFriends()">👥 Friends & Messages</button></div>
+  </div>
+  <div id="inviteCard" class="card hidden"><div class="title">🎮 ကစားဖို့ ဖိတ်ခေါ်မှု</div><div id="inviteList"></div></div>
+  <div id="resumeCard" class="card hidden"><div class="title">⚔️ လက်ရှိ Online ပွဲ</div><div class="notice">မပြီးသေးတဲ့ Online ပွဲရှိပါတယ်။ Timer က ဆက်လည်နေပါတယ်။</div><button class="btn green" onclick="resumeActiveGame()">ပွဲကို ပြန်ဝင်မယ်</button></div>
+  <div class="card"><div class="title">🎮 ကစားမယ်</div><div class="grid"><button class="btn green" onclick="startAI()">🧠 Computer Pro</button><button class="btn" id="quickMatchBtn" onclick="chooseTime('quick')">🌐 Online Quick Match</button><button class="btn secondary" onclick="openTournaments()">🏆 ပြိုင်ပွဲများ</button><button class="btn secondary" onclick="openLeaderboard()">📊 အဆင့်ဇယား</button><button class="btn secondary" onclick="showRules()">📖 Rules</button></div><div id="onlineInfo" class="small"></div></div>
+  <div class="card"><div class="section-head"><div class="title" style="margin:0">🌐 Online Lobby</div><button class="btn secondary" style="width:auto" onclick="loadLobby()">↻ Refresh</button></div><div class="small">Quick Match နှိပ်ပြီး ပြိုင်ဘက်စောင့်နေသူများ</div><div id="waitingPlayers" class="notice">Loading...</div><div class="small" style="margin-top:12px">⚔️ လက်ရှိကစားနေသောပွဲများ · Visitor အနေနဲ့ ဝင်ကြည့်နိုင်ပါတယ်</div><div id="liveGames" class="notice">Loading...</div></div>
+  <div class="card"><div class="small">မြန်မာ ကျားကွက် ချစ်မြတ်နိုးသူများအတွက် Future Code AI Studio မှ စီစဥ်တင်ဆက်ပေးထားပါသည်။</div></div>
+</section>
+
+<section id="profile" class="screen"><div class="top-nav"><button class="btn secondary" onclick="goHome()">← Home</button></div><div class="card"><div class="title">👤 ကျွန်ုပ်၏ ပရိုဖိုင်</div><div class="profile-head"><img id="editAvatarPreview" class="avatar big" alt=""><div class="grow"><input id="profileAvatarFile" class="field" type="file" accept="image/jpeg,image/png,image/webp"><div class="small">JPG / PNG / WEBP · 2MB အောက်</div></div></div><input id="profileNameInput" class="field" maxlength="24" placeholder="ကစားသမားနာမည်"><textarea id="profileBioInput" class="field" maxlength="160" rows="3" placeholder="မိတ်ဆက်စာတို"></textarea><button class="btn" onclick="saveProfile()">ပရိုဖိုင် သိမ်းမယ်</button></div></section>
+
+<section id="friends" class="screen"><div class="top-nav"><button class="btn secondary" onclick="goHome()">← Home</button><button class="btn secondary" onclick="loadFriends()">↻ Refresh</button></div><div class="card"><div class="title">🔎 Player ရှာမယ်</div><div class="row"><input id="friendSearch" class="field" maxlength="24" placeholder="နာမည်ရိုက်ရှာပါ"><button class="btn secondary" style="max-width:95px" onclick="searchPlayers()">ရှာမယ်</button></div><div id="playerSearchResults"></div></div><div class="card"><div class="title">👥 Friend Requests</div><div id="friendRequests"></div></div><div class="card"><div class="title">💬 Friends</div><div id="friendsList"></div></div></section>
+
+<section id="messages" class="screen"><div class="top-nav"><button class="btn secondary" onclick="openFriends()">← Friends</button></div><div class="card"><div id="messagePeer" class="title">💬 Message</div><div id="dmLog" class="chat-log"></div><div class="row"><input id="dmInput" class="field" maxlength="500" placeholder="စာရေးပါ..."><button class="btn" style="max-width:88px" onclick="sendDM()">ပို့မယ်</button></div><div class="stickers"><button class="sticker-btn" onclick="sendDMSticker('👍')">👍</button><button class="sticker-btn" onclick="sendDMSticker('👏')">👏</button><button class="sticker-btn" onclick="sendDMSticker('🔥')">🔥</button><button class="sticker-btn" onclick="sendDMSticker('😂')">😂</button><button class="sticker-btn" onclick="sendDMSticker('🤝')">🤝</button><button class="sticker-btn" onclick="sendDMSticker('🏆')">🏆</button></div></div></section>
+
+<section id="spectate" class="screen"><div class="top-nav"><button class="btn secondary" onclick="stopSpectating();goHome()">← Lobby</button><button class="btn secondary" onclick="openSpectatorReplay()">⏪ Replay</button></div><div class="card"><div class="title">👁️ Live ပွဲကြည့်နေသည်</div><div id="spectateNames" class="notice"></div><div class="spectator-note">Visitor View · ကစားကွက်ကို ပြောင်းလို့မရပါ</div><div id="spectateBoard" class="mini-board"></div><div id="spectateStatus" class="status"></div></div></section>
+
+<section id="leaderboard" class="screen">
+  <div class="top-nav"><button class="btn secondary" onclick="goHome()">← Home</button><button class="btn secondary" onclick="loadLeaderboard()">↻ Refresh</button></div>
+  <div class="card"><div class="title">📊 Online Ranking</div><div id="leaderboardList" class="notice">Loading...</div></div>
+</section>
+
+<section id="tournaments" class="screen">
+  <div class="top-nav"><button class="btn secondary" onclick="goHome()">← Home</button><button class="btn secondary" onclick="loadTournaments()">↻ Refresh</button></div>
+  <div class="card">
+    <div class="title">🏆 ပြိုင်ပွဲအသစ်</div>
+    <input id="tName" class="field" maxlength="80" placeholder="ပြိုင်ပွဲနာမည်">
+    <div class="row"><select id="tMax" class="field"><option value="2">2 Players</option><option value="4">4 Players</option><option value="8" selected>8 Players</option><option value="16">16 Players</option><option value="32">32 Players</option></select><select id="tTime" class="field"><option value="60">1 min</option><option value="180">3 min</option><option value="300" selected>5 min</option><option value="600">10 min</option></select></div>
+    <button class="btn" onclick="createTournament()">＋ Tournament ဖန်တီးမယ်</button>
+    <div class="small">Single Elimination · Rating Seed · အနိုင်ရသူကို နောက် Round အလိုအလျောက်တင်ပေးမယ်။</div>
+  </div>
+  <div class="card"><div class="title">🏟️ ပြိုင်ပွဲစာရင်း</div><div id="tournamentList">Loading...</div></div>
+</section>
+
+<section id="tournamentDetail" class="screen">
+  <div class="top-nav"><button class="btn secondary" onclick="openTournaments()">← Tournaments</button><button class="btn secondary" onclick="refreshTournamentDetail()">↻ Refresh</button></div>
+  <div id="tournamentDetailContent"><div class="notice">Loading...</div></div>
+</section>
+
+<section id="replay" class="screen">
+  <div class="top-nav"><button class="btn secondary" onclick="closeReplay()">← ပွဲသို့ပြန်မယ်</button></div>
+  <div class="card"><div class="title">⏪ Move Replay</div><div id="replayInfo" class="notice">Move 0</div><div id="replayBoard" class="mini-board"></div><div class="replay-controls"><button class="btn secondary" onclick="replayStep(-1)">◀</button><input id="replayRange" class="replay-range" type="range" min="0" max="0" value="0" oninput="setReplayIndex(Number(this.value))"><button class="btn secondary" onclick="replayStep(1)">▶</button></div></div>
+</section>
+
+<section id="game" class="screen">
+  <div id="status" class="status">Ready</div>
+  <div class="stats"><div class="stat">BLACK<b id="blackCount">12</b></div><div class="stat">MOVE<b id="moveNo">1</b></div><div class="stat">WHITE<b id="whiteCount">12</b></div></div>
+  <div class="board-shell">
+    <div id="topPlayerSlot" class="player-slot"></div><div class="board-caption">ပြိုင်ဘက်</div>
+    <div id="board"></div>
+    <div class="board-caption">သင် / လက်ရှိကစားသူ</div><div id="bottomPlayerSlot" class="player-slot"></div>
+  </div>
+  <div id="blackCard" class="player-card"><div><div id="blackName" class="player-name">⚫ Black</div><div id="blackMeta" class="meta"></div></div><div id="blackClock" class="clock">05:00</div></div>
+  <div id="whiteCard" class="player-card"><div><div id="whiteName" class="player-name">⚪ White</div><div id="whiteMeta" class="meta"></div></div><div id="whiteClock" class="clock">05:00</div></div>
+  <div class="actions"><button class="btn secondary" id="drawBtn" onclick="offerDraw()">🤝 Draw</button><button class="btn secondary" onclick="openHistory()">⏪ Replay</button><button class="btn secondary" id="chatToggle" onclick="toggleGameChat()">💬 Chat</button><button class="btn red resign" onclick="resignGame()">🏳 Resign</button></div><div id="gameChatPanel" class="chat-panel hidden"><div id="gameChatLog" class="chat-log"></div><div class="row"><input id="gameChatInput" class="field" maxlength="300" placeholder="ပြိုင်ဘက်ကို စာပို့ပါ..."><button class="btn" style="max-width:82px" onclick="sendGameChat()">ပို့မယ်</button></div><div class="stickers"><button class="sticker-btn" onclick="sendGameSticker('👍')">👍</button><button class="sticker-btn" onclick="sendGameSticker('👏')">👏</button><button class="sticker-btn" onclick="sendGameSticker('🔥')">🔥</button><button class="sticker-btn" onclick="sendGameSticker('😂')">😂</button><button class="sticker-btn" onclick="sendGameSticker('🤝')">🤝</button><button class="sticker-btn" onclick="sendGameSticker('🏆')">🏆</button></div></div>
+  <button class="btn secondary" onclick="leaveToHome()">← Home / Lobby</button>
+</section>
+</div>
+<div id="modal" class="modal"><div class="modalbox"><div id="modalText"></div><button class="btn secondary" onclick="closeModal()">Close</button></div></div>
+<div id="toast" class="toast"></div>
+<script src="/common.js"></script>
+<script src="/backend.js"></script>
+<script src="/game.js"></script>
+<script src="/ui.js"></script>
+</body>
+</html>
