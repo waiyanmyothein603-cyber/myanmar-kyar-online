@@ -7,7 +7,13 @@ on:
     paths:
       - 'package.json'
       - 'capacitor.config.json'
-      - 'www/**'
+      - 'index.html'
+      - 'style.css'
+      - 'common.js'
+      - 'backend.js'
+      - 'game.js'
+      - 'ui.js'
+      - 'resources/**'
       - '.github/workflows/android-build.yml'
 
 jobs:
@@ -32,11 +38,57 @@ jobs:
       - name: Install dependencies
         run: npm install
 
+      - name: Build local web bundle
+        run: |
+          rm -rf www
+          mkdir -p www
+          cp index.html style.css common.js backend.js game.js ui.js www/
+          sed -i 's#<title>မြန်မာကျား Online</title>#<title>မြန်မာ ကျားကွက်</title>#' www/index.html || true
+          sed -i 's#🐅 မြန်မာကျားကွက်#🐅 မြန်မာ ကျားကွက်#' www/index.html || true
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('www/common.js')
+          s=p.read_text(encoding='utf-8')
+          old='const GATEWAY_ORIGIN=(location.protocol==="http:"||location.protocol==="https:")?location.origin:"https://myanmar-kyar-online-waiyanmyothein603-9487.vercel.app";'
+          new='const GATEWAY_ORIGIN=(location.hostname==="localhost"||location.hostname==="127.0.0.1"||location.protocol==="file:")?"https://myanmar-kyar-online.vercel.app":location.origin;'
+          if old in s:
+              s=s.replace(old,new,1)
+          else:
+              lines=s.splitlines()
+              for i,line in enumerate(lines):
+                  if line.startswith('const GATEWAY_ORIGIN='):
+                      lines[i]=new
+                      break
+              s='\n'.join(lines)+'\n'
+          p.write_text(s,encoding='utf-8')
+          PY
+
       - name: Create Android project
-        run: npx cap add android
+        run: |
+          rm -rf android
+          npx cap add android
 
       - name: Sync Capacitor
         run: npx cap sync android
+
+      - name: Apply Android name and icon
+        run: |
+          STRINGS=android/app/src/main/res/values/strings.xml
+          if [ -f "$STRINGS" ]; then
+            sed -i 's#<string name="app_name">.*</string>#<string name="app_name">မြန်မာ ကျားကွက်</string>#' "$STRINGS" || true
+          fi
+          if [ -f resources/app-icon.b64 ]; then
+            if base64 --decode resources/app-icon.b64 > /tmp/mko-icon.png 2>/dev/null; then
+              for d in mdpi hdpi xhdpi xxhdpi xxxhdpi; do
+                mkdir -p "android/app/src/main/res/mipmap-$d"
+                cp /tmp/mko-icon.png "android/app/src/main/res/mipmap-$d/ic_launcher.png"
+                cp /tmp/mko-icon.png "android/app/src/main/res/mipmap-$d/ic_launcher_round.png"
+                cp /tmp/mko-icon.png "android/app/src/main/res/mipmap-$d/ic_launcher_foreground.png"
+              done
+            else
+              echo 'Custom icon data is incomplete; keeping Capacitor launcher icon for this build.'
+            fi
+          fi
 
       - name: Build debug APK
         working-directory: android
