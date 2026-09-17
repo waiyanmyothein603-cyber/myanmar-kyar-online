@@ -1,10 +1,12 @@
 {
   "appId": "com.futurecode.myanmarkyar",
-  "appName": "Myanmar Kyar Online",
+  "appName": "မြန်မာ ကျားကွက်",
   "webDir": "www",
+  "android": {
+    "allowMixedContent": false,
+    "backgroundColor": "#110904"
+  },
   "server": {
-    "url": "https://myanmar-kyar-online.vercel.app",
-    "cleartext": false,
     "androidScheme": "https"
   }
 }
