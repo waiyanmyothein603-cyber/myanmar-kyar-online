@@ -66,6 +66,30 @@ async function startTournament(id){try{await Backend.api("start_tournament",{tou
 async function viewTournament(id){currentTournamentId=id;showScreen("tournamentDetail");Backend.watchTournament(id);await refreshTournamentDetail()}
 async function refreshTournamentDetail(silent=false){if(!currentTournamentId)return;const el=$("tournamentDetailContent");if(!silent)el.innerHTML='<div class="notice"><span class="spinner"></span>Loading...</div>';try{const r=await Backend.api("tournament_details",{tournament_id:currentTournamentId});currentTournamentData=r;const t=r.tournament,players=r.players||[],matches=r.matches||[],me=Backend.user.id,isMember=players.some(x=>x.user_id===me),isHost=t.created_by===me;const byRound={};for(const m of matches)(byRound[m.round_no]??=[]).push(m);let bracket="";for(const rn of Object.keys(byRound).map(Number).sort((a,b)=>a-b)){bracket+=`<div class="round-head">ROUND ${rn}${rn===t.rounds?" · FINAL":""}</div>`+byRound[rn].map(m=>{const mine=m.player1_id===me||m.player2_id===me;const enter=mine&&m.status==="active"&&m.game_id?`<button class="btn green" onclick="openTournamentGame('${m.game_id}')">ပွဲဝင်မယ်</button>`:"";return `<div class="match-card"><b>Match ${m.match_no}</b><div class="small">${esc(m.player1?.username||"TBD")} vs ${esc(m.player2?.username||"TBD")}</div><div class="small">${m.status}${m.winner?.username?" · Winner: "+esc(m.winner.username):""}</div>${enter}</div>`}).join("")}el.innerHTML=`<div class="card"><div class="title">🏆 ${esc(t.name)}</div><div class="notice">${t.status.toUpperCase()} · ${players.length}/${t.max_players} Players · ${Math.round(t.time_limit_seconds/60)} min · ${t.rounds} Rounds</div>${t.champion?.username?`<div class="notice ok">🏆 Champion: <b>${esc(t.champion.username)}</b></div>`:""}${t.status==="open"&&!isMember?`<button class="btn" onclick="joinTournament('${t.id}')">Tournament ဝင်မယ်</button>`:""}${t.status==="open"&&isHost?`<button class="btn green" onclick="startTournament('${t.id}')">ပြိုင်ပွဲ စတင်မယ်</button><div class="small">Player ${t.max_players} ယောက်ပြည့်မှ စတင်နိုင်ပါတယ်။ Rating အလိုက် seed ခွဲပေးမယ်။</div>`:""}</div><div class="card"><div class="title">👥 Players</div>${players.map((p,i)=>`<div class="list-item"><div class="rankno">${p.seed?"#"+p.seed:"•"}</div><div class="grow"><b>${esc(p.profile?.username||"Player")}</b><div class="small">Rating ${p.profile?.rating??"—"} · ${p.status}</div></div></div>`).join("")||'<div class="notice">Player မရှိသေးပါ</div>'}</div><div class="card"><div class="title">🧩 Bracket</div>${bracket||'<div class="notice">Tournament စတင်ပြီးမှ bracket ပေါ်ပါမယ်။</div>'}</div>`}catch(e){if(!silent)el.innerHTML='<div class="notice err">'+esc(humanError(e.code||e.message))+'</div>'}}
 async function openTournamentGame(gameId){try{const r=await Backend.api("get_game",{game_id:gameId});await Backend.openGame(r.game)}catch(e){toast(humanError(e.code||e.message))}}
+let __lastAndroidBack=0;
+function activeScreenId(){return document.querySelector(".screen.active")?.id||"home"}
+function handleAndroidBack(){
+  if($("modal")?.classList.contains("show")){closeModal();return}
+  const screen=activeScreenId();
+  if(screen==="game"&&!$("gameChatPanel")?.classList.contains("hidden")){toggleGameChat();return}
+  if(screen==="replay"){closeReplay();return}
+  if(screen==="messages"){openFriends();return}
+  if(screen==="tournamentDetail"){openTournaments();return}
+  if(screen==="spectate"){stopSpectating();goHome();return}
+  if(screen==="game"){leaveToHome();return}
+  if(screen!=="home"){goHome();return}
+  const now=Date.now();
+  if(now-__lastAndroidBack<1800){window.Capacitor?.Plugins?.App?.exitApp?.();return}
+  __lastAndroidBack=now;
+  toast("App ထွက်ရန် Back ကို နောက်တစ်ကြိမ်နှိပ်ပါ");
+}
+function setupAndroidBackButton(){
+  const appPlugin=window.Capacitor?.Plugins?.App;
+  if(!appPlugin?.addListener)return;
+  appPlugin.addListener("backButton",()=>handleAndroidBack());
+}
+
 window.addEventListener("beforeunload",()=>{if(Game.mode!=="online")Game.timer.stop()});
 window.addEventListener("online",()=>{if(Backend.ready&&Backend.activeGameId)Backend.refreshGame(Backend.activeGameId)});
+setupAndroidBackButton();
 Backend.init().then(()=>{if(Backend.ready)startLobbyLoop()});
