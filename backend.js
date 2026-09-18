@@ -46,6 +46,7 @@ const Backend={
   async init(){
     try{
       this.ready=false;this.authError=null;
+      await prepareOnlineEndpoint();
       let session=null;
       if(window.supabase?.createClient){
         try{
