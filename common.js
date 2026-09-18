@@ -56,7 +56,7 @@ async function prepareOnlineEndpoint(){
 }
 
 bindOnlineOrigin(APK_GATEWAY_ORIGINS[0],true);
-const AI_BUDGET_MS=1800;
+const AI_BUDGET_MS=3400;
 
 const $=id=>document.getElementById(id);
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
@@ -84,4 +84,213 @@ const Rules={
 };
 class TimerEngine{constructor(onTick,onTimeout){this.onTick=onTick;this.onTimeout=onTimeout;this.id=null;this.limit=0;this.remaining={1:0,"-1":0};this.turn=1;this.started=0;this.running=false}reset(minutes,turn=1){this.stop();this.limit=minutes*60000;this.remaining={1:this.limit,"-1":this.limit};this.turn=turn;this.started=performance.now();this.running=true;this.id=setInterval(()=>this.tick(),100);this.tick()}live(side){if(!this.running||side!==this.turn)return this.remaining[side];return Math.max(0,this.remaining[side]-(performance.now()-this.started))}commitTurn(){if(!this.running)return;this.remaining[this.turn]=this.live(this.turn)}switchTurn(next){this.commitTurn();this.turn=next;this.started=performance.now();this.tick()}tick(){if(!this.running)return;const b=this.live(1),w=this.live(-1);this.onTick(b,w);const cur=this.live(this.turn);if(cur<=0){const loser=this.turn;this.stop();this.onTimeout(loser)}}stop(){if(this.id)clearInterval(this.id);this.id=null;this.running=false}}
 class ResultEngine{constructor(){this.done=false;this.result=null}reset(){this.done=false;this.result=null}finalize(result){if(this.done)return false;this.done=true;this.result={...result,at:Date.now()};return true}}
-const AI={MATE:10000000,INF:1000000000,nodes:0,lastDepth:0,lastScore:0,lastNodes:0,key(b,side){return side+"|"+b.map(r=>r.join(",")).join("/")},countPieces(b){let n=0;for(const row of b)for(const p of row)if(p)n++;return n},evaluate(b){let score=0,blackMen=0,whiteMen=0,blackKings=0,whiteKings=0;for(let r=0;r<8;r++)for(let c=0;c<8;c++){const p=b[r][c];if(!p)continue;const side=p>0?1:-1,king=isKing(p),advance=side===1?r:7-r;const center=7-(Math.abs(r-3.5)+Math.abs(c-3.5));const edge=(r===0||r===7||c===0||c===7)?1:0;let v=king?335:100;if(king){v+=center*4-edge*5;if(side===1)blackKings++;else whiteKings++}else{v+=advance*7+center*1.8+edge*3;if((side===1&&r===0)||(side===-1&&r===7))v+=10;if(advance>=5)v+=18+(advance-5)*12;if(side===1)blackMen++;else whiteMen++}score+=side*v}const total=blackMen+whiteMen+blackKings+whiteKings;const bCaps=Rules.captureSequences(b,1),wCaps=Rules.captureSequences(b,-1);const bMoves=bCaps.length?bCaps:Rules.normalMoves(b,1);const wMoves=wCaps.length?wCaps:Rules.normalMoves(b,-1);score+=(bMoves.length-wMoves.length)*(total<=10?8:4);if(bCaps.length)score+=28+bCaps[0].count*34+bCaps[0].kings*24;if(wCaps.length)score-=28+wCaps[0].count*34+wCaps[0].kings*24;if(total<=10){score+=(blackKings-whiteKings)*45;score+=(blackMen-whiteMen)*10}return Math.round(score)},moveKey(m){return m.path.map(x=>`${x.from.r}${x.from.c}-${x.to.r}${x.to.c}${x.capture?`x${x.capture.r}${x.capture.c}`:""}`).join("|")},moveOrderScore(m,side,ttBest=null,sourceBoard=null){const key=this.moveKey(m);if(ttBest&&key===ttBest)return this.MATE*2;const term=Rules.terminal(m.board,-side);if(term)return term.winner===side?this.MATE:-this.MATE;let s=m.count*12000+m.kings*2600;const last=m.path[m.path.length-1],first=m.path[0];const beforeKing=isKing(first&&sourceBoard?sourceBoard[first.from.r][first.from.c]:0);const afterPiece=last?m.board[last.to.r][last.to.c]:0;if(!beforeKing&&isKing(afterPiece))s+=4200;const oppCaps=Rules.captureSequences(m.board,-side);if(oppCaps.length)s-=oppCaps[0].count*5200+oppCaps[0].kings*1200;s+=this.evaluate(m.board)*side*3;return s},order(moves,side,ttBest=null,sourceBoard=null){return moves.slice().sort((a,b)=>this.moveOrderScore(b,side,ttBest,sourceBoard)-this.moveOrderScore(a,side,ttBest,sourceBoard))},choose(b,side,budget=AI_BUDGET_MS){const root=Rules.legal(b,side);if(!root.length)return null;const pieces=this.countPieces(b),ownEval=this.evaluate(b)*side;let realBudget=budget;if(pieces<=10)realBudget=Math.max(realBudget,2400);if(pieces<=7)realBudget=Math.max(realBudget,3000);if(ownEval<-140)realBudget=Math.max(realBudget,3000);const start=performance.now(),deadline=start+realBudget;const tt=new Map(),history=new Map(),killers=new Map();this.nodes=0;this.lastDepth=0;this.lastScore=0;const timeUp=()=>performance.now()>=deadline;const checkTime=()=>{this.nodes++;if((this.nodes&63)===0&&timeUp())throw Error("TIME")};const qsearch=(board,s,alpha,beta,qleft,ply)=>{checkTime();const term=Rules.terminal(board,s);if(term)return term.winner===s?this.MATE-ply:-this.MATE+ply;const caps=Rules.captureSequences(board,s);if(!caps.length||qleft<=0)return this.evaluate(board)*s;let best=-this.INF;const ordered=this.order(caps,s,null,board);for(const m of ordered){const v=-qsearch(m.board,-s,-beta,-alpha,qleft-1,ply+1);if(v>best)best=v;if(v>alpha)alpha=v;if(alpha>=beta)break}return best};const search=(board,s,depth,alpha,beta,ply)=>{checkTime();const alphaOrig=alpha,key=this.key(board,s),entry=tt.get(key);if(entry&&entry.depth>=depth){if(entry.flag==="EXACT")return entry.value;if(entry.flag==="LOWER")alpha=Math.max(alpha,entry.value);else if(entry.flag==="UPPER")beta=Math.min(beta,entry.value);if(alpha>=beta)return entry.value}const term=Rules.terminal(board,s);if(term)return term.winner===s?this.MATE-ply:-this.MATE+ply;if(depth<=0)return qsearch(board,s,alpha,beta,8,ply);const moves=Rules.legal(board,s);let ordered=this.order(moves,s,entry?.best||null,board);const killer=killers.get(ply);if(killer)ordered.sort((a,z)=>(this.moveKey(z)===killer?1:0)-(this.moveKey(a)===killer?1:0));ordered.sort((a,z)=>(history.get(this.moveKey(z))||0)-(history.get(this.moveKey(a))||0));let best=-this.INF,bestKey=null;for(let i=0;i<ordered.length;i++){const m=ordered[i];let childDepth=depth-1;if(m.count>0&&depth<=2)childDepth=depth;let v;if(i===0)v=-search(m.board,-s,childDepth,-beta,-alpha,ply+1);else{v=-search(m.board,-s,childDepth,-alpha-1,-alpha,ply+1);if(v>alpha&&v<beta)v=-search(m.board,-s,childDepth,-beta,-alpha,ply+1)}if(v>best){best=v;bestKey=this.moveKey(m)}if(v>alpha)alpha=v;if(alpha>=beta){if(m.count===0){killers.set(ply,bestKey);history.set(bestKey,(history.get(bestKey)||0)+depth*depth)}break}}let flag="EXACT";if(best<=alphaOrig)flag="UPPER";else if(best>=beta)flag="LOWER";tt.set(key,{depth,value:best,flag,best:bestKey});return best};let best=this.order(root,side,null,b)[0],completedScore=-this.INF;const maxDepth=pieces<=7?24:pieces<=10?18:14;for(let depth=1;depth<=maxDepth;depth++){if(timeUp())break;try{let localBest=best,localScore=-this.INF,alpha=-this.INF,beta=this.INF;const rootEntry=tt.get(this.key(b,side));const ordered=this.order(root,side,rootEntry?.best||this.moveKey(best),b);for(let i=0;i<ordered.length;i++){const m=ordered[i];let v;if(i===0)v=-search(m.board,-side,depth-1,-beta,-alpha,1);else{v=-search(m.board,-side,depth-1,-alpha-1,-alpha,1);if(v>alpha&&v<beta)v=-search(m.board,-side,depth-1,-beta,-alpha,1)}if(v>localScore){localScore=v;localBest=m}if(v>alpha)alpha=v;if(timeUp())throw Error("TIME")}best=localBest;completedScore=localScore;this.lastDepth=depth;this.lastScore=localScore;if(localScore>=this.MATE-1000)break}catch(e){if(e.message!=="TIME")console.error(e);break}}this.lastNodes=this.nodes;return best}}
+const AI={
+  MATE:10000000,INF:1000000000,nodes:0,lastDepth:0,lastScore:0,lastNodes:0,
+  key(b,side){return side+"|"+b.map(r=>r.join(",")).join("/")},
+  countPieces(b){let n=0;for(const row of b)for(const p of row)if(p)n++;return n},
+  evaluate(b){
+    let score=0,blackMen=0,whiteMen=0,blackKings=0,whiteKings=0,total=0;
+    for(const row of b)for(const p of row)if(p)total++;
+    for(let r=0;r<8;r++)for(let c=0;c<8;c++){
+      const p=b[r][c];if(!p)continue;
+      const side=p>0?1:-1,king=isKing(p),advance=side===1?r:7-r;
+      const center=7-(Math.abs(r-3.5)+Math.abs(c-3.5));
+      const edge=(r===0||r===7||c===0||c===7)?1:0;
+      let v=king?365:100;
+      if(king){
+        v+=center*(total<=10?7:4)-edge*(total<=8?2:5);
+        if(side===1)blackKings++;else whiteKings++;
+      }else{
+        v+=advance*8+center*2+edge*2;
+        if(advance>=5)v+=22+(advance-5)*16;
+        if((side===1&&r===0)||(side===-1&&r===7))v+=total>12?12:4;
+        if(advance===6)v+=26;
+        const back=side===1?-1:1;
+        let support=0;
+        for(const dc of [-1,1]){
+          const sr=r+back,sc=c+dc;
+          if(inside(sr,sc)&&sideOf(b[sr][sc])===side)support++;
+        }
+        v+=support*7;
+        if(side===1)blackMen++;else whiteMen++;
+      }
+      score+=side*v;
+    }
+
+    const bCaps=Rules.captureSequences(b,1),wCaps=Rules.captureSequences(b,-1);
+    const bMoves=bCaps.length?bCaps:Rules.normalMoves(b,1);
+    const wMoves=wCaps.length?wCaps:Rules.normalMoves(b,-1);
+    const mobilityWeight=total<=10?10:5;
+    score+=(bMoves.length-wMoves.length)*mobilityWeight;
+
+    if(bCaps.length){
+      const kings=Math.max(...bCaps.map(x=>x.kings||0));
+      score+=42+bCaps[0].count*48+kings*34;
+    }
+    if(wCaps.length){
+      const kings=Math.max(...wCaps.map(x=>x.kings||0));
+      score-=42+wCaps[0].count*48+kings*34;
+    }
+
+    if(total<=12){
+      score+=(blackKings-whiteKings)*58+(blackMen-whiteMen)*12;
+      const material=(blackMen-whiteMen)*100+(blackKings-whiteKings)*365;
+      if(material>120)score+=18;else if(material<-120)score-=18;
+    }
+    return Math.round(score);
+  },
+  moveKey(m){return m.path.map(x=>`${x.from.r}${x.from.c}-${x.to.r}${x.to.c}${x.capture?`x${x.capture.r}${x.capture.c}`:""}`).join("|")},
+  promotes(m,sourceBoard){
+    const first=m.path?.[0],last=m.path?.[m.path.length-1];
+    if(!first||!last||!sourceBoard)return false;
+    const before=sourceBoard[first.from.r][first.from.c];
+    const after=m.board[last.to.r][last.to.c];
+    return !!before&&!isKing(before)&&isKing(after);
+  },
+  moveOrderScore(m,side,ttBest=null,sourceBoard=null){
+    const key=this.moveKey(m);if(ttBest&&key===ttBest)return this.MATE*2;
+    const term=Rules.terminal(m.board,-side);if(term)return term.winner===side?this.MATE:-this.MATE;
+    let s=m.count*16000+m.kings*4200;
+    if(this.promotes(m,sourceBoard))s+=6500;
+    const oppCaps=Rules.captureSequences(m.board,-side);
+    if(oppCaps.length){
+      const k=Math.max(...oppCaps.map(x=>x.kings||0));
+      s-=oppCaps[0].count*7200+k*2200;
+    }
+    s+=this.evaluate(m.board)*side*4;
+    return s;
+  },
+  order(moves,side,ttBest=null,sourceBoard=null){
+    return moves.slice().sort((a,b)=>this.moveOrderScore(b,side,ttBest,sourceBoard)-this.moveOrderScore(a,side,ttBest,sourceBoard));
+  },
+  choose(b,side,budget=AI_BUDGET_MS){
+    const root=Rules.legal(b,side);if(!root.length)return null;
+    const pieces=this.countPieces(b),ownEval=this.evaluate(b)*side;
+    let realBudget=Math.max(3200,budget);
+    if(pieces<=14)realBudget=Math.max(realBudget,4200);
+    if(pieces<=10)realBudget=Math.max(realBudget,5200);
+    if(pieces<=7)realBudget=Math.max(realBudget,7000);
+    if(ownEval<-160)realBudget=Math.max(realBudget,5200);
+
+    const start=performance.now(),deadline=start+realBudget;
+    const tt=new Map(),history=new Map(),killers=new Map(),seen=new Map();
+    this.nodes=0;this.lastDepth=0;this.lastScore=0;
+    const timeUp=()=>performance.now()>=deadline;
+    const checkTime=()=>{this.nodes++;if((this.nodes&63)===0&&timeUp())throw Error("TIME")};
+    const enter=(board,s)=>{
+      const k=this.key(board,s),n=seen.get(k)||0;
+      if(n>=2)return null;
+      seen.set(k,n+1);return k;
+    };
+    const leave=k=>{if(!k)return;const n=(seen.get(k)||1)-1;if(n<=0)seen.delete(k);else seen.set(k,n)};
+
+    const qsearch=(board,s,alpha,beta,qleft,ply)=>{
+      checkTime();
+      const rep=enter(board,s);if(!rep)return 0;
+      try{
+        const term=Rules.terminal(board,s);
+        if(term)return term.winner===s?this.MATE-ply:-this.MATE+ply;
+        const caps=Rules.captureSequences(board,s);
+        if(!caps.length||qleft<=0)return this.evaluate(board)*s;
+        let best=-this.INF;
+        const ordered=this.order(caps,s,null,board);
+        for(const m of ordered){
+          const v=-qsearch(m.board,-s,-beta,-alpha,qleft-1,ply+1);
+          if(v>best)best=v;if(v>alpha)alpha=v;if(alpha>=beta)break;
+        }
+        return best;
+      }finally{leave(rep)}
+    };
+
+    const search=(board,s,depth,alpha,beta,ply)=>{
+      checkTime();
+      const rep=enter(board,s);if(!rep)return 0;
+      try{
+        const alphaOrig=alpha,key=this.key(board,s),entry=tt.get(key);
+        if(entry&&entry.depth>=depth){
+          if(entry.flag==="EXACT")return entry.value;
+          if(entry.flag==="LOWER")alpha=Math.max(alpha,entry.value);else if(entry.flag==="UPPER")beta=Math.min(beta,entry.value);
+          if(alpha>=beta)return entry.value;
+        }
+        const term=Rules.terminal(board,s);
+        if(term)return term.winner===s?this.MATE-ply:-this.MATE+ply;
+        if(depth<=0)return qsearch(board,s,alpha,beta,12,ply);
+
+        const moves=Rules.legal(board,s);
+        let ordered=this.order(moves,s,entry?.best||null,board);
+        const killer=killers.get(ply);
+        if(killer)ordered.sort((a,z)=>(this.moveKey(z)===killer?1:0)-(this.moveKey(a)===killer?1:0));
+        ordered.sort((a,z)=>(history.get(this.moveKey(z))||0)-(history.get(this.moveKey(a))||0));
+
+        let best=-this.INF,bestKey=null;
+        for(let i=0;i<ordered.length;i++){
+          const m=ordered[i];
+          let childDepth=depth-1;
+          if(m.count>0)childDepth=depth;
+          else if(this.promotes(m,board)&&depth<=5)childDepth=depth;
+
+          let v;
+          if(i===0)v=-search(m.board,-s,childDepth,-beta,-alpha,ply+1);
+          else{
+            v=-search(m.board,-s,childDepth,-alpha-1,-alpha,ply+1);
+            if(v>alpha&&v<beta)v=-search(m.board,-s,childDepth,-beta,-alpha,ply+1);
+          }
+          if(v>best){best=v;bestKey=this.moveKey(m)}
+          if(v>alpha)alpha=v;
+          if(alpha>=beta){
+            if(m.count===0){
+              killers.set(ply,bestKey);
+              history.set(bestKey,(history.get(bestKey)||0)+depth*depth);
+            }
+            break;
+          }
+        }
+        let flag="EXACT";if(best<=alphaOrig)flag="UPPER";else if(best>=beta)flag="LOWER";
+        tt.set(key,{depth,value:best,flag,best:bestKey});
+        return best;
+      }finally{leave(rep)}
+    };
+
+    let best=this.order(root,side,null,b)[0],completedScore=-this.INF;
+    const maxDepth=pieces<=7?36:pieces<=10?26:pieces<=14?20:17;
+
+    for(let depth=1;depth<=maxDepth;depth++){
+      if(timeUp())break;
+      try{
+        let localBest=best,localScore=-this.INF;
+        let alpha=-this.INF,beta=this.INF;
+        if(depth>=4&&Math.abs(completedScore)<this.MATE/2){alpha=completedScore-110;beta=completedScore+110}
+        const originalAlpha=alpha,originalBeta=beta;
+        const rootEntry=tt.get(this.key(b,side));
+        const ordered=this.order(root,side,rootEntry?.best||this.moveKey(best),b);
+
+        const runRoot=(a,z)=>{
+          let rb=localBest,rs=-this.INF,ra=a;
+          for(let i=0;i<ordered.length;i++){
+            const m=ordered[i];
+            let d=depth-1;if(m.count>0)d=depth;else if(this.promotes(m,b)&&depth<=5)d=depth;
+            let v;
+            if(i===0)v=-search(m.board,-side,d,-z,-ra,1);
+            else{
+              v=-search(m.board,-side,d,-ra-1,-ra,1);
+              if(v>ra&&v<z)v=-search(m.board,-side,d,-z,-ra,1);
+            }
+            if(v>rs){rs=v;rb=m}
+            if(v>ra)ra=v;
+            if(timeUp())throw Error("TIME");
+          }
+          return {best:rb,score:rs};
+        };
+
+        let result=runRoot(alpha,beta);
+        if((result.score<=originalAlpha||result.score>=originalBeta)&&!timeUp())result=runRoot(-this.INF,this.INF);
+        localBest=result.best;localScore=result.score;
+        best=localBest;completedScore=localScore;
+        this.lastDepth=depth;this.lastScore=localScore;
+        if(Math.abs(localScore)>=this.MATE-1000)break;
+      }catch(e){if(e.message!=="TIME")console.error(e);break}
+    }
+    this.lastNodes=this.nodes;
+    return best;
+  }
+}
