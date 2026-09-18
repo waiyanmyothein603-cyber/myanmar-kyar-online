@@ -1,11 +1,61 @@
 "use strict";
 
-const GATEWAY_ORIGIN=(location.protocol==="http:"||location.protocol==="https:")?location.origin:"https://myanmar-kyar-online-waiyanmyothein603-9487.vercel.app";
-const SUPABASE_URL=GATEWAY_ORIGIN+"/api/supabase";
-const SUPABASE_KEY="";
-const MKO_API=SUPABASE_URL+"/functions/v1/mko-api";
-const MKO_MOVE_API=SUPABASE_URL+"/functions/v1/mko-move-v2";
-const MKO_SOCIAL=SUPABASE_URL+"/functions/v1/mko-social";
+const SUPABASE_KEY="sb_publishable_uX2k4cNAjusr6MuM1gForw_Yo03bSS9";
+const DIRECT_SUPABASE_ORIGIN="https://qcrecblhumamiqqyiccw.supabase.co";
+const APK_GATEWAY_ORIGINS=[
+  "https://myanmar-kyar-online.vercel.app",
+  "https://myanmar-kyar-online-estiy7oxp-waiyanmyothein603-9487.vercel.app"
+];
+let GATEWAY_ORIGIN="";
+let SUPABASE_URL="";
+let MKO_API="";
+let MKO_MOVE_API="";
+let MKO_SOCIAL="";
+let ONLINE_TRANSPORT="";
+
+function bindOnlineOrigin(origin,proxy=true){
+  GATEWAY_ORIGIN=origin.replace(/\/$/,"");
+  SUPABASE_URL=proxy?GATEWAY_ORIGIN+"/api/supabase":GATEWAY_ORIGIN;
+  MKO_API=SUPABASE_URL+"/functions/v1/mko-api";
+  MKO_MOVE_API=SUPABASE_URL+"/functions/v1/mko-move-v2";
+  MKO_SOCIAL=SUPABASE_URL+"/functions/v1/mko-social";
+  ONLINE_TRANSPORT=proxy?"Vercel Gateway":"Direct Supabase";
+}
+
+async function prepareOnlineEndpoint(){
+  const candidates=[];
+  const isLocal=location.hostname==="localhost"||location.hostname==="127.0.0.1"||location.protocol==="file:"||location.protocol==="capacitor:";
+  if(!isLocal && (location.protocol==="https:"||location.protocol==="http:")){
+    candidates.push({origin:location.origin,proxy:true,label:"Same-origin Gateway"});
+  }
+  for(const origin of APK_GATEWAY_ORIGINS){
+    if(!candidates.some(x=>x.origin===origin)) candidates.push({origin,proxy:true,label:"Vercel Gateway"});
+  }
+  candidates.push({origin:DIRECT_SUPABASE_ORIGIN,proxy:false,label:"Direct Supabase"});
+  const failures=[];
+  for(const c of candidates){
+    try{
+      const testUrl=c.proxy
+        ? c.origin.replace(/\/$/,"")+"/api/supabase/auth/v1/settings"
+        : c.origin.replace(/\/$/,"")+"/auth/v1/settings";
+      const headers={"Accept":"application/json"};
+      if(!c.proxy) headers["apikey"]=SUPABASE_KEY;
+      const res=await fetch(testUrl,{method:"GET",headers,cache:"no-store"});
+      if(res.ok){
+        bindOnlineOrigin(c.origin,c.proxy);
+        console.info("Online endpoint:",c.label,GATEWAY_ORIGIN);
+        return {ok:true,label:c.label,origin:GATEWAY_ORIGIN};
+      }
+      failures.push(c.label+" HTTP "+res.status);
+    }catch(e){
+      failures.push(c.label+" "+String(e?.message||e));
+    }
+  }
+  bindOnlineOrigin(APK_GATEWAY_ORIGINS[0],true);
+  throw new Error("ONLINE_GATEWAY_UNREACHABLE · "+failures.join(" | "));
+}
+
+bindOnlineOrigin(APK_GATEWAY_ORIGINS[0],true);
 const AI_BUDGET_MS=1800;
 
 const $=id=>document.getElementById(id);
