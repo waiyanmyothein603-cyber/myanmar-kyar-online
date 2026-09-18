@@ -104,10 +104,13 @@ jobs:
 
           values=res/'values'
           values.mkdir(parents=True,exist_ok=True)
-          (values/'mko_launcher_background.xml').write_text(
+          (values/'ic_launcher_background.xml').write_text(
               '<?xml version="1.0" encoding="utf-8"?><resources><color name="ic_launcher_background">#120904</color></resources>',
               encoding='utf-8'
           )
+          stale=values/'mko_launcher_background.xml'
+          if stale.exists():
+              stale.unlink()
           print('Custom icon source:',src.size)
           PY
 
