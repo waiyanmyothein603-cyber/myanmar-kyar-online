@@ -45,23 +45,6 @@ jobs:
           cp index.html style.css common.js backend.js game.js ui.js www/
           sed -i 's#<title>မြန်မာကျား Online</title>#<title>မြန်မာ ကျားကွက်</title>#' www/index.html || true
           sed -i 's#🐅 မြန်မာကျားကွက်#🐅 မြန်မာ ကျားကွက်#' www/index.html || true
-          python3 - <<'PY'
-          from pathlib import Path
-          p=Path('www/common.js')
-          s=p.read_text(encoding='utf-8')
-          old='const GATEWAY_ORIGIN=(location.protocol==="http:"||location.protocol==="https:")?location.origin:"https://myanmar-kyar-online-waiyanmyothein603-9487.vercel.app";'
-          new='const GATEWAY_ORIGIN=(location.hostname==="localhost"||location.hostname==="127.0.0.1"||location.protocol==="file:")?"https://myanmar-kyar-online.vercel.app":location.origin;'
-          if old in s:
-              s=s.replace(old,new,1)
-          else:
-              lines=s.splitlines()
-              for i,line in enumerate(lines):
-                  if line.startswith('const GATEWAY_ORIGIN='):
-                      lines[i]=new
-                      break
-              s='\n'.join(lines)+'\n'
-          p.write_text(s,encoding='utf-8')
-          PY
 
       - name: Create Android project
         run: |
@@ -71,24 +54,71 @@ jobs:
       - name: Sync Capacitor
         run: npx cap sync android
 
-      - name: Apply Android name and icon
+      - name: Apply Android name and exact icon
         run: |
           STRINGS=android/app/src/main/res/values/strings.xml
-          if [ -f "$STRINGS" ]; then
-            sed -i 's#<string name="app_name">.*</string>#<string name="app_name">မြန်မာ ကျားကွက်</string>#' "$STRINGS" || true
-          fi
-          if [ -f resources/app-icon.b64 ]; then
-            if base64 --decode resources/app-icon.b64 > /tmp/mko-icon.png 2>/dev/null; then
-              for d in mdpi hdpi xhdpi xxhdpi xxxhdpi; do
-                mkdir -p "android/app/src/main/res/mipmap-$d"
-                cp /tmp/mko-icon.png "android/app/src/main/res/mipmap-$d/ic_launcher.png"
-                cp /tmp/mko-icon.png "android/app/src/main/res/mipmap-$d/ic_launcher_round.png"
-                cp /tmp/mko-icon.png "android/app/src/main/res/mipmap-$d/ic_launcher_foreground.png"
-              done
-            else
-              echo 'Custom icon data is incomplete; keeping Capacitor launcher icon for this build.'
-            fi
-          fi
+          sed -i 's#<string name="app_name">.*</string>#<string name="app_name">မြန်မာ ကျားကွက်</string>#' "$STRINGS"
+
+          python3 -m pip install --quiet pillow
+          base64 --decode resources/app-icon.b64 > /tmp/mko-icon.jpg
+
+          python3 - <<'PY'
+          from PIL import Image
+          from pathlib import Path
+
+          src=Image.open('/tmp/mko-icon.jpg').convert('RGBA')
+          if src.width < 100 or src.height < 100:
+              raise SystemExit('Icon source is unexpectedly small')
+
+          res=Path('android/app/src/main/res')
+          legacy={'mdpi':48,'hdpi':72,'xhdpi':96,'xxhdpi':144,'xxxhdpi':192}
+          foreground={'mdpi':108,'hdpi':162,'xhdpi':216,'xxhdpi':324,'xxxhdpi':432}
+
+          for density,size in legacy.items():
+              d=res/f'mipmap-{density}'
+              d.mkdir(parents=True,exist_ok=True)
+              icon=src.resize((size,size),Image.Resampling.LANCZOS)
+              icon.save(d/'ic_launcher.png','PNG',optimize=True)
+              icon.save(d/'ic_launcher_round.png','PNG',optimize=True)
+
+          for density,size in foreground.items():
+              d=res/f'mipmap-{density}'
+              d.mkdir(parents=True,exist_ok=True)
+              canvas=Image.new('RGBA',(size,size),(0,0,0,0))
+              inner=round(size*0.84)
+              image=src.resize((inner,inner),Image.Resampling.LANCZOS)
+              off=((size-inner)//2,(size-inner)//2)
+              canvas.alpha_composite(image,off)
+              canvas.save(d/'ic_launcher_foreground.png','PNG',optimize=True)
+
+          anydpi=res/'mipmap-anydpi-v26'
+          anydpi.mkdir(parents=True,exist_ok=True)
+          xml='''<?xml version="1.0" encoding="utf-8"?>
+          <adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
+              <background android:drawable="@color/ic_launcher_background" />
+              <foreground android:drawable="@mipmap/ic_launcher_foreground" />
+          </adaptive-icon>
+          '''
+          (anydpi/'ic_launcher.xml').write_text(xml,encoding='utf-8')
+          (anydpi/'ic_launcher_round.xml').write_text(xml,encoding='utf-8')
+
+          values=res/'values'
+          values.mkdir(parents=True,exist_ok=True)
+          (values/'mko_launcher_background.xml').write_text(
+              '<?xml version="1.0" encoding="utf-8"?><resources><color name="ic_launcher_background">#120904</color></resources>',
+              encoding='utf-8'
+          )
+          print('Custom icon source:',src.size)
+          PY
+
+      - name: Verify bundled app before compile
+        run: |
+          grep -q 'မြန်မာ ကျားကွက်' www/index.html
+          grep -q 'prepareOnlineEndpoint' www/common.js
+          grep -q 'CapacitorHttp' capacitor.config.json
+          grep -q 'myanmar-kyar-online-estiy7oxp-waiyanmyothein603-9487.vercel.app' www/common.js
+          test -s android/app/src/main/res/mipmap-xxxhdpi/ic_launcher.png
+          test -s android/app/src/main/res/mipmap-xxxhdpi/ic_launcher_foreground.png
 
       - name: Build debug APK
         working-directory: android
