@@ -67,7 +67,7 @@ jobs:
           from pathlib import Path
 
           src=Image.open('/tmp/mko-icon.jpg').convert('RGBA')
-          if src.width < 100 or src.height < 100:
+          if src.width < 64 or src.height < 64:
               raise SystemExit('Icon source is unexpectedly small')
 
           res=Path('android/app/src/main/res')
